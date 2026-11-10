@@ -3,9 +3,11 @@ import uuid
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Kullanicilar
+from .models import  Kullanicilar,Menuler, MenuYemekleri, YemekAlerjenleri,BakiyeHareketleri, Degerlendirmeler
 from .serializers import KullaniciSerializer
 from django.db import connections, utils
+from django.utils import timezone
+from django.db.models import Avg
 
 class LoginView(APIView):
     def post(self, request):
@@ -33,8 +35,6 @@ class LoginView(APIView):
         else:
             return Response({'hata': 'Hatalı şifre.'}, status=status.HTTP_401_UNAUTHORIZED)
         
-from .models import Menuler, MenuYemekleri, YemekAlerjenleri
-
 class GununMenusuView(APIView):
     def get(self, request):
         yemekhane_id = request.query_params.get('yemekhane_id')
@@ -212,3 +212,107 @@ class RezervasyonlarimView(APIView):
             })
 
         return Response(sonuc)
+    
+class BakiyeYukleView(APIView):
+    def post(self, request):
+        kullanici_id = request.data.get('kullanici_id')
+        tutar = request.data.get('tutar')
+
+        if not kullanici_id or not tutar:
+            return Response({'hata': 'kullanici_id ve tutar gereklidir.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with connections['default'].cursor() as cursor:
+                cursor.execute("CALL sp_bakiye_yukle(%s, %s)", [kullanici_id, tutar])
+                row = cursor.fetchone()
+                
+            return Response({
+                'mesaj': 'Bakiye başarıyla yüklendi.',
+                'hareket_id': row[0],
+                'guncel_bakiye': row[1]
+            })
+        except utils.OperationalError as e:
+            hata_kodu = e.args[0]
+            if hata_kodu == 1644:
+                return Response({'hata': e.args[1]}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'hata': 'Veritabanı hatası oluştu.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class BakiyeGecmisiView(APIView):
+    def get(self, request):
+        kullanici_id = request.query_params.get('kullanici_id')
+        if not kullanici_id:
+            return Response({'hata': 'kullanici_id gerekli.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        hareketler = BakiyeHareketleri.objects.filter(kullanici_id=kullanici_id).order_by('-olusturma')
+        data = [{
+            'tutar': h.tutar,
+            'tur': h.tur,
+            'aciklama': h.aciklama,
+            'tarih': h.olusturma
+        } for h in hareketler]
+        
+        return Response(data)
+
+class DegerlendirmeYapView(APIView):
+    def post(self, request):
+        kullanici_id = request.data.get('kullanici_id')
+        menu_id = request.data.get('menu_id')
+        puan = request.data.get('puan')
+        yorum = request.data.get('yorum', '')
+
+        if not all([kullanici_id, menu_id, puan]):
+            return Response({'hata': 'kullanici_id, menu_id ve puan gereklidir.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            Degerlendirmeler.objects.create(
+                kullanici_id_id=kullanici_id,
+                menu_id_id=menu_id,
+                puan=puan,
+                yorum=yorum,
+                olusturma=timezone.now()
+            )
+            return Response({'mesaj': 'Değerlendirme başarıyla kaydedildi.'})
+        except Exception:
+            return Response({'hata': 'Değerlendirme yapılamadı (Daha önce değerlendirmiş olabilirsiniz).'}, status=status.HTTP_400_BAD_REQUEST)
+        
+class YoneticiPaneliView(APIView):
+    # Menü doluluk ve ortalama puan listeleme
+    def get(self, request):
+        with connections['replica'].cursor() as cursor:
+            # v_menu_doluluk ve degerlendirmeler birleştirilir
+            sorgu = """
+                SELECT m.id, m.tarih, o.ad as ogun, v.bos_yer, 
+                       IFNULL(AVG(d.puan), 0) as ortalama_puan
+                FROM menuler m
+                JOIN ogunler o ON m.ogun_id = o.id
+                LEFT JOIN v_menu_doluluk v ON m.id = v.menu_id
+                LEFT JOIN degerlendirmeler d ON m.id = d.menu_id
+                GROUP BY m.id, m.tarih, o.ad, v.bos_yer
+                ORDER BY m.tarih DESC
+            """
+            cursor.execute(sorgu)
+            satirlar = cursor.fetchall()
+            
+        data = [{
+            'menu_id': s[0], 'tarih': s[1], 'ogun': s[2], 
+            'bos_yer': s[3], 'ortalama_puan': float(s[4])
+        } for s in satirlar]
+        return Response(data)
+
+    # Menü oluşturma 
+    def post(self, request):
+        yemekhane_id = request.data.get('yemekhane_id')
+        tarih = request.data.get('tarih')
+        ogun_id = request.data.get('ogun_id')
+        ogrenci_fiyati = request.data.get('ogrenci_fiyati')
+        personel_fiyati = request.data.get('personel_fiyati')
+
+        if not all([yemekhane_id, tarih, ogun_id, ogrenci_fiyati, personel_fiyati]):
+            return Response({'hata': 'Eksik bilgi.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        Menuler.objects.create(
+            yemekhane_id_id=yemekhane_id, tarih=tarih, ogun_id_id=ogun_id,
+            ogrenci_fiyati=ogrenci_fiyati, personel_fiyati=personel_fiyati,
+            olusturma=timezone.now(), guncelleme=timezone.now()
+        )
+        return Response({'mesaj': 'Menü oluşturuldu.'})
