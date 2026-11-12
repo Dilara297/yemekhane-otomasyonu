@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Menü Değerlendirme</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #666; font-size: 14px; font-weight: bold; }
+        select, textarea, button { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; font-size: 16px; }
+        textarea { resize: vertical; }
+        .btn-mavi { background-color: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-mavi:hover { background-color: #0056b3; }
+        .nav-link { display: block; text-align: center; margin-top: 20px; color: #0056b3; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Menü Değerlendirme</h2>
+        
+        <div class="form-group">
+            <label>Yemekhane</label>
+            <select id="yhSelect" onchange="menuleriGetir()">
+                <option value="1">Merkez Yemekhanesi</option>
+                <option value="2">Mühendislik Fakültesi</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Değerlendirilecek Menü (Son 7 Gün)</label>
+            <select id="menuSelect">
+                <option value="">Yükleniyor...</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>Puanınız (1-5)</label>
+            <select id="puanSelect">
+                <option value="5">5 - Çok İyi</option>
+                <option value="4">4 - İyi</option>
+                <option value="3">3 - Orta</option>
+                <option value="2">2 - Kötü</option>
+                <option value="1">1 - Çok Kötü</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Yorumunuz (İsteğe Bağlı)</label>
+            <textarea id="yorumKutusu" rows="3" placeholder="Yemeklerin sıcaklığı, lezzeti ve porsiyonları nasıldı?"></textarea>
+        </div>
+
+        <button class="btn-mavi" id="btnGonder">Değerlendirmeyi Gönder</button>
+        
+        <a href="gunun-menusu.html" class="nav-link">Günün Menüsüne Dön →</a>
+    </div>
+
+    <script>
+        const kullaniciId = localStorage.getItem('kullanici_id');
+        
+        // Kullanıcı giriş yapmamışsa anasayfaya yönlendir
+        if (!kullaniciId) window.location.href = 'index.html';
+
+        // Son 7 günün menülerini çekip listeye ekleyen fonksiyon
+        function menuleriGetir() {
+            const yhId = document.getElementById('yhSelect').value;
+            const menuSelect = document.getElementById('menuSelect');
+            
+            // Tarih aralığını hesapla (Bugün ve 7 gün öncesi)
+            const bugun = new Date();
+            const bitis = bugun.toISOString().split('T')[0];
+            
+            const gecenHafta = new Date();
+            gecenHafta.setDate(bugun.getDate() - 7);
+            const baslangic = gecenHafta.toISOString().split('T')[0];
+
+            menuSelect.innerHTML = '<option value="">Menüler Yükleniyor...</option>';
+
+            fetch(`/api/menu/haftalik/?yemekhane_id=${yhId}&baslangic=${baslangic}&bitis=${bitis}`)
+            .then(res => res.json())
+            .then(data => {
+                menuSelect.innerHTML = '';
+                if (data.length === 0 || data.hata) {
+                    menuSelect.innerHTML = '<option value="">Bu aralıkta menü bulunamadı</option>';
+                    return;
+                }
+                
+                // Menüleri tarihe göre ters sırala (en yeniler en üstte görünsün)
+                data.sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+
+               data.forEach(m => {
+                // API'den id mi yoksa menu_id mi döndüğünü yakalamak için ikisini de kontrol ediyoruz
+                const gercekId = m.id || m.menu_id; 
+                menuSelect.innerHTML += `<option value="${gercekId}">${m.tarih} - ${m.ogun}</option>`;
+            });
+            })
+            .catch(err => {
+                menuSelect.innerHTML = '<option value="">Bağlantı hatası oluştu</option>';
+            });
+        }
+
+        // Gönder butonuna tıklandığında
+        document.getElementById('btnGonder').addEventListener('click', () => {
+            const menuId = document.getElementById('menuSelect').value;
+            const puan = document.getElementById('puanSelect').value;
+            const yorum = document.getElementById('yorumKutusu').value;
+
+            if (!menuId) {
+                alert('Lütfen değerlendirmek için geçerli bir menü seçin.');
+                return;
+            }
+
+            // POST isteği ile veritabanına yaz
+            fetch('/api/degerlendirme/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    kullanici_id: kullaniciId,
+                    menu_id: menuId,
+                    puan: parseInt(puan),
+                    yorum: yorum
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.hata) {
+                    alert('Hata: ' + data.hata); // Örn: Daha önce değerlendirmiş olabilirsiniz
+                } else {
+                    alert(data.mesaj || 'Değerlendirmeniz başarıyla kaydedildi. Teşekkür ederiz!');
+                    document.getElementById('yorumKutusu').value = ''; // Yorum kutusunu temizle
+                }
+            })
+            .catch(err => alert('Sistemsel bir hata oluştu.'));
+        });
+
+        // Sayfa ilk açıldığında menü listesini otomatik getir
+        document.addEventListener('DOMContentLoaded', menuleriGetir);
+    </script>
+</body>
+</html>

@@ -1,70 +1,129 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Yemekhane Otomasyonu · Başlangıç</title>
-  <link rel="stylesheet" href="/css/temel.css">
-  <style>
-    /* Yalnızca bu geçici sayfaya ait stiller */
-    .fis {
-      background: var(--yuzey);
-      margin-block: 2rem;
-      padding: 1.5rem var(--bosluk);
-      border-radius: var(--kose);
-      /* yemek fişi görünümü: alt kenarda yırtma çizgisi */
-      border-bottom: 2px dashed var(--cizgi);
-    }
-    .fis h1 { margin-bottom: 0.25rem; }
-    .fis .alt { color: var(--metin-soluk); margin-bottom: 1.5rem; }
-    .servisler { width: 100%; border-collapse: collapse; font-size: var(--boyut-kucuk); }
-    .servisler th, .servisler td { text-align: left; padding: 0.5rem 0.25rem; border-bottom: 1px solid var(--cizgi); }
-    .servisler td:last-child { white-space: nowrap; }
-    #uygulama-durumu { margin-top: 1.5rem; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Yemekhane Otomasyonu - Giriş</title>
+    <style>
+        /* Mobil uyumlu (400px hedefli) temel tasarım */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-size: 14px;
+        }
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #004494;
+        }
+        #hataMesaji {
+            color: #dc3545;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
 </head>
 <body>
-  <main class="kapsayici">
-    <section class="fis">
-      <h1>Yemekhane Otomasyonu</h1>
-      <p class="alt">Apache çalışıyor. Bu sayfa başlangıç paketine ait; kendi giriş ekranınızla değiştirin.</p>
 
-      <div class="tablo-kaydir">
-        <table class="servisler">
-          <thead>
-            <tr><th>Servis</th><th>Görevi</th><th>Bilgisayarınızdan</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>frontend</td><td>HTML/CSS, yönlendirme</td><td>localhost:8080</td></tr>
-            <tr><td>mysql-primary</td><td>yazma</td><td>localhost:3307</td></tr>
-            <tr><td>mysql-replica</td><td>okuma, salt okunur</td><td>localhost:3308</td></tr>
-            <tr><td>redis</td><td>menü önbelleği, oturum</td><td>localhost:6379</td></tr>
-            <tr><td>uygulama</td><td>sizin yazacağınız servis</td><td>Apache üzerinden</td></tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="container">
+        <h2>Yemekhane Giriş</h2>
+        <form id="girisFormu">
+            <div class="form-group">
+                <label for="eposta">E-posta</label>
+                <input type="email" id="eposta" required>
+            </div>
+            <div class="form-group">
+                <label for="sifre">Şifre</label>
+                <input type="password" id="sifre" required>
+            </div>
+            <button type="submit">Giriş Yap</button>
+            <div id="hataMesaji"></div>
+        </form>
+    </div>
 
-      <p id="uygulama-durumu" class="bildirim" role="status">Uygulama servisi kontrol ediliyor…</p>
-    </section>
-  </main>
+    <script>
+        // Form gönderildiğinde çalışacak API isteği (fetch)
+        document.getElementById('girisFormu').addEventListener('submit', function(e) {
+            e.preventDefault(); // Sayfanın yenilenmesini engelle
 
-  <script>
-    // Web API modunda /api/ isteği uygulamaya gider. 502/503 ise uygulama yok ya da çalışmıyor.
-    const kutu = document.getElementById('uygulama-durumu');
-    fetch('/api/', { headers: { Accept: 'application/json' } })
-      .then(yanit => {
-        if (yanit.status === 502 || yanit.status === 503) {
-          kutu.textContent = 'Uygulama servisine ulaşılamıyor. docker-compose.yml içindeki uygulama servisini ekleyip "docker compose up -d" çalıştırın.';
-          kutu.classList.add('bildirim-hata');
-        } else {
-          kutu.textContent = 'Uygulama servisi yanıt veriyor (HTTP ' + yanit.status + ').';
-          kutu.classList.add('bildirim-basari');
-        }
-      })
-      .catch(() => {
-        kutu.textContent = 'İstek gönderilemedi. Apache günlüğüne bakın: docker compose logs frontend';
-        kutu.classList.add('bildirim-hata');
-      });
-  </script>
+            const eposta = document.getElementById('eposta').value;
+            const sifre = document.getElementById('sifre').value;
+            const hataKutusu = document.getElementById('hataMesaji');
+            hataKutusu.style.display = 'none';
+
+            // Apache proxy ayarı gereği /api/ istekleri doğrudan Django'ya yönlendirilecek
+            fetch('/api/giris/', { 
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ eposta: eposta, sifre: sifre })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('E-posta veya şifre hatalı!');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Giriş başarılıysa kullanıcı bilgilerini tarayıcıya kaydet
+                localStorage.setItem('kullanici_id', data.kullanici.id);
+                localStorage.setItem('kullanici_rol', data.kullanici.rol);
+                
+                // Günün menüsü sayfasına yönlendir
+                window.location.href = 'gunun-menusu.html';
+            })
+            .catch(error => {
+                hataKutusu.textContent = error.message;
+                hataKutusu.style.display = 'block';
+            });
+        });
+    </script>
 </body>
 </html>

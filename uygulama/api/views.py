@@ -261,19 +261,19 @@ class DegerlendirmeYapView(APIView):
         yorum = request.data.get('yorum', '')
 
         if not all([kullanici_id, menu_id, puan]):
-            return Response({'hata': 'kullanici_id, menu_id ve puan gereklidir.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'hata': 'Eksik parametre gönderildi.'}, status=400)
 
         try:
             Degerlendirmeler.objects.create(
-                kullanici_id_id=kullanici_id,
-                menu_id_id=menu_id,
+                kullanici_id=kullanici_id,
+                menu_id=menu_id,
                 puan=puan,
                 yorum=yorum,
                 olusturma=timezone.now()
             )
-            return Response({'mesaj': 'Değerlendirme başarıyla kaydedildi.'})
-        except Exception:
-            return Response({'hata': 'Değerlendirme yapılamadı (Daha önce değerlendirmiş olabilirsiniz).'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'mesaj': 'Değerlendirmeniz başarıyla kaydedildi.'})
+        except Exception as e:
+            return Response({'hata': f'Hata Detayı: {str(e)}'}, status=400)
         
 class YoneticiPaneliView(APIView):
     # Menü doluluk ve ortalama puan listeleme

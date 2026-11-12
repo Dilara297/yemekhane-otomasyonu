@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rezervasyonlarım</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        .rez-karti { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 6px; background: #fafafa; }
+        .rez-baslik { font-weight: bold; font-size: 16px; margin-bottom: 5px; color: #333; }
+        .durum { font-weight: bold; font-size: 12px; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+        .durum.aktif { background-color: #d4edda; color: #155724; }
+        .durum.iptal { background-color: #f8d7da; color: #721c24; }
+        .durum.kullanıldı { background-color: #e2e3e5; color: #383d41; }
+        .btn-iptal { background-color: #dc3545; color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        .btn-iptal:disabled { background-color: #ccc; cursor: not-allowed; }
+        .nav-link { display: block; text-align: center; margin-top: 20px; color: #0056b3; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Rezervasyonlarım</h2>
+        <div id="listeKutusu"><em>Yükleniyor...</em></div>
+        <a href="bakiye.html" class="nav-link">Bakiye İşlemleri →</a>
+    </div>
+
+    <script>
+        const kullaniciId = localStorage.getItem('kullanici_id');
+        
+        if (!kullaniciId) {
+            window.location.href = 'index.html';
+        }
+
+        function rezervasyonlariGetir() {
+            const kutu = document.getElementById('listeKutusu');
+            
+            fetch(`/api/rezervasyonlarim/?kullanici_id=${kullaniciId}`)
+            .then(res => res.json())
+            .then(data => {
+                kutu.innerHTML = '';
+                
+                if (data.length === 0 || data.hata) {
+                    kutu.innerHTML = '<div style="text-align:center; color:#666;">Henüz bir rezervasyonunuz bulunmuyor.</div>';
+                    return;
+                }
+
+                data.forEach(rez => {
+                    // İptal şartlarını kontrol et (Sadece aktif ve süresi geçmemiş olanlar)
+                    const suAn = new Date();
+                    const rezSonTarihSaat = new Date(`${rez.tarih}T${rez.rezervasyon_son}`);
+                    const iptalSuresiGectiMi = suAn > rezSonTarihSaat;
+                    
+                    const iptalEdilebilir = (rez.durum === 'aktif' && !iptalSuresiGectiMi);
+                    const disabledAttr = iptalEdilebilir ? '' : 'disabled';
+                    
+                    let butonMetni = 'İptal Et';
+                    if (rez.durum !== 'aktif') butonMetni = 'İşlem Yapılamaz';
+                    else if (iptalSuresiGectiMi) butonMetni = 'İptal Süresi Doldu';
+
+                    kutu.innerHTML += `
+                        <div class="rez-karti">
+                            <div class="rez-baslik">${rez.tarih} - ${rez.ogun}</div>
+                            <div class="durum ${rez.durum.toLowerCase()}">${rez.durum.toUpperCase()}</div>
+                            <div style="font-size: 14px; color: #555; margin-bottom: 10px;">Kesilen Ücret: ${rez.ucret} TL</div>
+                            <button class="btn-iptal" onclick="iptalIslemi(${rez.rezervasyon_id})" ${disabledAttr}>
+                                ${butonMetni}
+                            </button>
+                        </div>
+                    `;
+                });
+            })
+            .catch(err => {
+                kutu.innerHTML = '<span style="color:red; display:block; text-align:center;">Veriler alınırken hata oluştu.</span>';
+            });
+        }
+
+        // Global seviyede iptal fonksiyonu
+        window.iptalIslemi = function(rezId) {
+            if(!confirm('Bu rezervasyonu iptal etmek istediğinize emin misiniz?')) return;
+            
+            fetch('/api/rezervasyon/iptal/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kullanici_id: kullaniciId, rezervasyon_id: rezId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.hata) {
+                    alert('Hata: ' + data.hata);
+                } else {
+                    alert(`İptal Başarılı! İade Edilen: ${data.iade_edilen} TL. Yeni Bakiye: ${data.guncel_bakiye} TL`);
+                    rezervasyonlariGetir(); // Ekranı yenile
+                }
+            })
+            .catch(err => alert('Sistemsel bir bağlantı hatası oluştu.'));
+        };
+
+        // Sayfa açıldığında verileri çek
+        document.addEventListener('DOMContentLoaded', rezervasyonlariGetir);
+    </script>
+</body>
+</html>

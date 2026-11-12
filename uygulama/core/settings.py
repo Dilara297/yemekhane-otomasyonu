@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-cs$i7l&s#e%()nd(y&_a226$_wlyh&=_$h1%v(8d1$$dk=+!_2
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -81,8 +81,8 @@ DATABASES = {
         'NAME': os.environ.get('DB_ADI', 'yemekhane'),
         'USER': os.environ.get('DB_KULLANICI', 'yemekhane_app'),
         'PASSWORD': os.environ.get('DB_SIFRE', 'Uyg_2026'),
-        'HOST': os.environ.get('DB_YAZMA_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '3307'),
+        'HOST': os.environ.get('DB_YAZMA_HOST', 'mysql-primary'),
+        'PORT': os.environ.get('DB_PORT', '3306'),
         'OPTIONS': {
             'charset': 'utf8mb4',
         }
@@ -92,8 +92,8 @@ DATABASES = {
         'NAME': os.environ.get('DB_ADI', 'yemekhane'),
         'USER': os.environ.get('DB_KULLANICI', 'yemekhane_app'),
         'PASSWORD': os.environ.get('DB_SIFRE', 'Uyg_2026'),
-        'HOST': os.environ.get('DB_OKUMA_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '3308'),
+        'HOST': os.environ.get('DB_OKUMA_HOST', 'mysql-replica'),
+        'PORT': os.environ.get('DB_PORT', '3306'),
         'OPTIONS': {
             'charset': 'utf8mb4',
         }

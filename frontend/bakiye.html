@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bakiye İşlemleri</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        .bakiye-karti { background: #e9ecef; padding: 15px; text-align: center; border-radius: 6px; margin-bottom: 20px; font-size: 18px; color: #555; }
+        .guncel-bakiye { font-size: 28px; font-weight: bold; color: #28a745; display: block; margin-top: 5px; }
+        input, button { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; }
+        .btn-yukle { background-color: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .btn-yukle:hover { background-color: #218838; }
+        .gecmis-liste { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+        .gecmis-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        .arti { color: #28a745; font-weight: bold; }
+        .eksi { color: #dc3545; font-weight: bold; }
+        .nav-link { display: block; text-align: center; margin-top: 20px; color: #0056b3; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Bakiye İşlemleri</h2>
+        
+        <div class="bakiye-karti">
+            Mevcut Bakiye
+            <span class="guncel-bakiye" id="bakiyeMiktari">... TL</span>
+        </div>
+
+        <div style="margin-bottom: 25px;">
+            <input type="number" id="yuklemeMiktari" placeholder="Yüklenecek Tutar (10 - 1000 TL)" min="10" max="1000">
+            <button class="btn-yukle" id="btnYukle">Bakiye Yükle</button>
+        </div>
+
+        <h3 style="font-size: 16px; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px;">Hareket Geçmişi</h3>
+        <ul class="gecmis-liste" id="gecmisKutusu">
+            <em>Yükleniyor...</em>
+        </ul>
+
+        <a href="degerlendirme.html" class="nav-link">Değerlendirme Yap →</a>
+    </div>
+
+    <script>
+        const kullaniciId = localStorage.getItem('kullanici_id');
+        
+        if (!kullaniciId) {
+            window.location.href = 'index.html';
+        }
+
+        function verileriGetir() {
+            const kutu = document.getElementById('gecmisKutusu');
+            
+            fetch(`/api/bakiye/gecmis/?kullanici_id=${kullaniciId}`)
+            .then(res => res.json())
+            .then(data => {
+                kutu.innerHTML = '';
+                
+                if (data.hata || data.length === 0) {
+                    kutu.innerHTML = '<li style="text-align:center; color:#666;">Geçmiş işlem bulunamadı.</li>';
+                    document.getElementById('bakiyeMiktari').textContent = '0.00 TL';
+                    return;
+                }
+
+                let hesaplananBakiye = 0;
+
+                data.forEach(h => {
+                    // Veritabanı kuralına göre bakiye her zaman hareketlerin toplamıdır
+                    hesaplananBakiye += parseFloat(h.tutar);
+
+                    const tarih = new Date(h.tarih).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    const isaret = h.tutar > 0 ? '+' : '';
+                    const renk = h.tutar > 0 ? 'arti' : 'eksi';
+                    
+                    kutu.innerHTML += `
+                        <li class="gecmis-item">
+                            <div>
+                                <strong>${h.tur}</strong><br>
+                                <span style="font-size:12px; color:#777;">${tarih}</span>
+                            </div>
+                            <div class="${renk}">${isaret}${h.tutar} TL</div>
+                        </li>
+                    `;
+                });
+
+                document.getElementById('bakiyeMiktari').textContent = hesaplananBakiye.toFixed(2) + ' TL';
+            })
+            .catch(err => {
+                kutu.innerHTML = '<span style="color:red;">Veriler alınırken hata oluştu.</span>';
+            });
+        }
+
+        document.getElementById('btnYukle').addEventListener('click', () => {
+            const tutar = document.getElementById('yuklemeMiktari').value;
+            
+            if (!tutar || tutar < 10 || tutar > 1000) {
+                alert('Lütfen 10 TL ile 1000 TL arasında geçerli bir tutar girin.');
+                return;
+            }
+
+            fetch('/api/bakiye/yukle/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kullanici_id: kullaniciId, tutar: tutar })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.hata) {
+                    alert('Hata: ' + data.hata);
+                } else {
+                    alert('Bakiye başarıyla yüklendi!');
+                    document.getElementById('yuklemeMiktari').value = '';
+                    verileriGetir(); // Ekranı yenile
+                }
+            })
+            .catch(err => alert('Sistemsel bir hata oluştu.'));
+        });
+
+        // Sayfa yüklendiğinde geçmişi ve bakiyeyi çek
+        document.addEventListener('DOMContentLoaded', verileriGetir);
+    </script>
+</body>
+</html>

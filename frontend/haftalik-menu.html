@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Haftalık Menü ve Rezervasyon</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        select, button { width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; }
+        .btn-mavi { background-color: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .btn-mavi:hover { background-color: #0056b3; }
+        .menu-karti { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 6px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .menu-baslik { font-weight: bold; font-size: 16px; color: #333; margin-bottom: 5px; }
+        .menu-detay { font-size: 14px; color: #666; margin-bottom: 10px; }
+        .fiyat { font-weight: bold; color: #28a745; font-size: 18px; }
+        .bos-yer { color: #d32f2f; font-size: 13px; font-weight: bold; float: right; margin-top: 4px; }
+        .btn-rez { background-color: #28a745; color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-rez:disabled { background-color: #ccc; cursor: not-allowed; }
+        .nav-link { display: block; text-align: center; margin-top: 20px; color: #0056b3; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Haftalık Menüler</h2>
+        
+        <select id="yemekhaneSelect">
+            <option value="1">Merkez Yemekhanesi</option>
+            <option value="2">Mühendislik Fakültesi</option>
+        </select>
+        
+        <button id="getirBtn" class="btn-mavi">Menüleri Listele</button>
+
+        <div id="listeKutusu" style="margin-top: 20px;"></div>
+        
+        <a href="rezervasyonlarim.html" class="nav-link">Rezervasyonlarım →</a>
+    </div>
+
+    <script>
+        const kullaniciId = localStorage.getItem('kullanici_id');
+        const kullaniciRol = localStorage.getItem('kullanici_rol');
+
+        if (!kullaniciId) {
+            window.location.href = 'index.html';
+        }
+
+        document.getElementById('getirBtn').addEventListener('click', () => {
+            const yhId = document.getElementById('yemekhaneSelect').value;
+            const listeKutusu = document.getElementById('listeKutusu');
+            
+            // Bugünü ve 6 gün sonrasını hesapla (YYYY-MM-DD)
+            const bugun = new Date();
+            const baslangic = bugun.toISOString().split('T')[0];
+            const bitisTarihi = new Date(bugun);
+            bitisTarihi.setDate(bugun.getDate() + 6);
+            const bitis = bitisTarihi.toISOString().split('T')[0];
+
+            listeKutusu.innerHTML = '<em>Yükleniyor...</em>';
+
+            fetch(`/api/menu/haftalik/?yemekhane_id=${yhId}&baslangic=${baslangic}&bitis=${bitis}`)
+            .then(res => res.json())
+            .then(data => {
+                listeKutusu.innerHTML = '';
+                
+                if(data.length === 0 || data.hata) {
+                    listeKutusu.innerHTML = '<div style="color:red; text-align:center;">Bu tarih aralığında menü bulunamadı.</div>';
+                    return;
+                }
+
+                data.forEach(menu => {
+                    // Kullanıcı rolüne göre fiyat belirleme
+                    const fiyat = (kullaniciRol === 'öğrenci') ? menu.ogrenci_fiyati : menu.personel_fiyati;
+                    
+                    // Son saat kontrolü (Pasif düğme için)
+                    const suAn = new Date();
+                    const rezSonTarihSaat = new Date(`${menu.tarih}T${menu.rezervasyon_son}`);
+                    const gectiMi = suAn > rezSonTarihSaat;
+                    
+                    const disabledAttr = (gectiMi || menu.bos_yer <= 0) ? 'disabled' : '';
+                    const butonMetni = gectiMi ? 'Süre Doldu' : (menu.bos_yer <= 0 ? 'Dolu' : 'Rezervasyon Yap');
+
+                    listeKutusu.innerHTML += `
+                        <div class="menu-karti">
+                            <div class="menu-baslik">${menu.tarih} - ${menu.ogun}</div>
+                            <div class="menu-detay">
+                                <span class="fiyat">${fiyat} TL</span>
+                                <span class="bos-yer">Kalan: ${menu.bos_yer}</span>
+                            </div>
+                            <button class="btn-rez" onclick="rezervasyonYap(${menu.menu_id})" ${disabledAttr}>
+                                ${butonMetni}
+                            </button>
+                        </div>
+                    `;
+                });
+            });
+        });
+
+        // Rezervasyon Yapma Fonksiyonu
+        function rezervasyonYap(menuId) {
+            fetch('/api/rezervasyon/yap/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kullanici_id: kullaniciId, menu_id: menuId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.hata) {
+                    alert('Hata: ' + data.hata);
+                } else {
+                    alert(`Başarılı! Kesilen Ücret: ${data.kesilen_ucret} TL. Güncel Bakiye: ${data.guncel_bakiye} TL`);
+                    document.getElementById('getirBtn').click(); // Listeyi yenile
+                }
+            })
+            .catch(err => alert('Sistemsel bir hata oluştu.'));
+        }
+    </script>
+</body>
+</html>

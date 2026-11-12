@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Günün Menüsü</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #666; font-size: 14px; }
+        select, button { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; }
+        button { background-color: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:hover { background-color: #218838; }
+        .menu-karti { background: #fff8e1; border-left: 4px solid #ffc107; padding: 15px; margin-top: 20px; border-radius: 4px; display: none; }
+        .yemek-kalemi { border-bottom: 1px dashed #ccc; padding: 8px 0; }
+        .yemek-kalemi:last-child { border-bottom: none; }
+        .rozeti { font-size: 12px; padding: 2px 6px; border-radius: 10px; margin-left: 5px; color: white; display: inline-block; }
+        .rozeti.vejetaryen { background-color: #28a745; }
+        .rozeti.alerjen { background-color: #dc3545; }
+        .toplam-kalori { margin-top: 15px; font-weight: bold; text-align: right; color: #d32f2f; }
+        .nav-link { display: block; text-align: center; margin-top: 20px; color: #0056b3; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Günün Menüsü</h2>
+        
+        <div class="form-group">
+            <label for="yemekhaneSelect">Yemekhane Seçin</label>
+            <select id="yemekhaneSelect">
+                <!-- API'den doldurulacak -->
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="ogunSelect">Öğün Seçin</label>
+            <select id="ogunSelect">
+                <!-- API'den doldurulacak -->
+            </select>
+        </div>
+
+        <button id="menuGetirBtn">Menüyü Getir</button>
+
+        <div id="menuSonuc" class="menu-karti">
+            <h3 id="tarihBaslik" style="margin-top:0; font-size: 16px;"></h3>
+            <div id="yemekListesi"></div>
+            <div class="toplam-kalori" id="toplamKaloriYazisi"></div>
+        </div>
+        
+        <a href="haftalik-menu.html" class="nav-link">Haftalık Menü ve Rezervasyon →</a>
+    </div>
+
+    <script>
+        // Sayfa yüklendiğinde çalışacaklar
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // 1. Kullanıcı girişi kontrolü (Eğer login değilse index'e at)
+            if (!localStorage.getItem('kullanici_id')) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // 2. Yemekhane ve Öğün seçeneklerini API'den çek (Şimdilik sabit mock verilerle listeleri dolduruyoruz, API bağlamasını birazdan yapacağız)
+            const yemekhaneler = [{id: 1, ad: 'Merkez Yemekhanesi'}, {id: 2, ad: 'Mühendislik Fakültesi'}];
+            const ogunler = [{id: 1, ad: 'Öğle Yemeği'}, {id: 2, ad: 'Akşam Yemeği'}];
+
+            const yhSelect = document.getElementById('yemekhaneSelect');
+            yemekhaneler.forEach(y => yhSelect.add(new Option(y.ad, y.id)));
+
+            const oSelect = document.getElementById('ogunSelect');
+            ogunler.forEach(o => oSelect.add(new Option(o.ad, o.id)));
+        });
+
+        // "Menüyü Getir" butonuna tıklandığında
+        document.getElementById('menuGetirBtn').addEventListener('click', () => {
+            const yemekhane_id = document.getElementById('yemekhaneSelect').value;
+            const ogun_id = document.getElementById('ogunSelect').value;
+            
+            // Bugünün tarihini YYYY-MM-DD formatında al
+            const bugun = new Date().toISOString().split('T')[0]; 
+            
+            const sonucKutusu = document.getElementById('menuSonuc');
+            const yemekListesi = document.getElementById('yemekListesi');
+            
+            yemekListesi.innerHTML = '<em>Yükleniyor...</em>';
+            sonucKutusu.style.display = 'block';
+
+            // API'ye İstek Atıyoruz
+            fetch(`/api/menu/?yemekhane_id=${yemekhane_id}&ogun_id=${ogun_id}&tarih=${bugun}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Menü bulunamadı.');
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('tarihBaslik').textContent = `${bugun} Menüsü`;
+                yemekListesi.innerHTML = '';
+                
+                let toplamKcal = 0;
+
+                // Gelen yemekleri HTML'e çevir
+                data.yemekler.forEach(yemek => {
+                    toplamKcal += yemek.kalori;
+                    
+                    let rozetler = '';
+                    if (yemek.vejetaryen) rozetler += `<span class="rozeti vejetaryen">V</span>`;
+                    if (yemek.alerjen) rozetler += `<span class="rozeti alerjen">Alerjen</span>`;
+
+                    yemekListesi.innerHTML += `
+                        <div class="yemek-kalemi">
+                            ${yemek.yemek_ad} ${rozetler}
+                            <div style="font-size:12px; color:#777;">${yemek.kalori} kcal</div>
+                        </div>
+                    `;
+                });
+
+                document.getElementById('toplamKaloriYazisi').textContent = `Toplam: ${toplamKcal} kcal`;
+            })
+            .catch(error => {
+                yemekListesi.innerHTML = `<span style="color:red;">Bugün için bu kriterlerde menü tanımlanmamış.</span>`;
+                document.getElementById('toplamKaloriYazisi').textContent = '';
+                document.getElementById('tarihBaslik').textContent = '';
+            });
+        });
+    </script>
+</body>
+</html>
