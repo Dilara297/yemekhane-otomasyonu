@@ -41,6 +41,7 @@
         </ul>
 
         <a href="degerlendirme.html" class="nav-link">Değerlendirme Yap →</a>
+        <button id="btn-cikis" class="btn-cikis">Çıkış Yap</button>
     </div>
 
     <script>
@@ -120,6 +121,12 @@
 
         // Sayfa yüklendiğinde geçmişi ve bakiyeyi çek
         document.addEventListener('DOMContentLoaded', verileriGetir);
+        
+        document.getElementById('btn-cikis').addEventListener('click', function() {
+            localStorage.removeItem('kullanici_id');
+            localStorage.removeItem('token');
+            window.location.href = 'index.html';
+});
     </script>
 </body>
 </html>

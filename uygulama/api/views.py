@@ -30,6 +30,7 @@ class LoginView(APIView):
             return Response({
                 'mesaj': 'Giriş başarılı',
                 'kullanici': serializer.data,
+                'rol': kullanici.rol,
                 'token': token
             })
         else:
@@ -263,6 +264,17 @@ class DegerlendirmeYapView(APIView):
         if not all([kullanici_id, menu_id, puan]):
             return Response({'hata': 'Eksik parametre gönderildi.'}, status=400)
 
+        # 1. Kural: Kullanıcı bu menüyü gerçekten tüketmiş mi?
+        with connections['replica'].cursor() as cursor:
+            cursor.execute("""
+                SELECT durum FROM rezervasyonlar 
+                WHERE kullanici_id = %s AND menu_id = %s AND durum = 'kullanildi'
+            """, [kullanici_id, menu_id])
+            kullanildi_mi = cursor.fetchone()
+
+        if not kullanildi_mi:
+            return Response({'hata': 'Sadece kullandığınız (tükettiğiniz) menüleri değerlendirebilirsiniz.'}, status=400)
+
         try:
             Degerlendirmeler.objects.create(
                 kullanici_id=kullanici_id,
@@ -316,3 +328,22 @@ class YoneticiPaneliView(APIView):
             olusturma=timezone.now(), guncelleme=timezone.now()
         )
         return Response({'mesaj': 'Menü oluşturuldu.'})
+    
+    # Menü düzenleme/güncelleme
+    def put(self, request):
+        menu_id = request.data.get('menu_id')
+        ogrenci_fiyati = request.data.get('ogrenci_fiyati')
+        personel_fiyati = request.data.get('personel_fiyati')
+
+        if not all([menu_id, ogrenci_fiyati, personel_fiyati]):
+            return Response({'hata': 'Eksik bilgi.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            menu = Menuler.objects.get(id=menu_id)
+            menu.ogrenci_fiyati = ogrenci_fiyati
+            menu.personel_fiyati = personel_fiyati
+            menu.guncelleme = timezone.now()
+            menu.save()
+            return Response({'mesaj': 'Menü başarıyla güncellendi.'})
+        except Menuler.DoesNotExist:
+            return Response({'hata': 'Menü bulunamadı.'}, status=status.HTTP_404_NOT_FOUND)

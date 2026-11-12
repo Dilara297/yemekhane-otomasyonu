@@ -56,6 +56,7 @@
         <button class="btn-mavi" id="btnGonder">Değerlendirmeyi Gönder</button>
         
         <a href="gunun-menusu.html" class="nav-link">Günün Menüsüne Dön →</a>
+        <button id="btn-cikis" class="btn-cikis">Çıkış Yap</button>
     </div>
 
     <script>
@@ -138,6 +139,12 @@
 
         // Sayfa ilk açıldığında menü listesini otomatik getir
         document.addEventListener('DOMContentLoaded', menuleriGetir);
+
+        document.getElementById('btn-cikis').addEventListener('click', function() {
+            localStorage.removeItem('kullanici_id');
+            localStorage.removeItem('token');
+            window.location.href = 'index.html'; 
+});
     </script>
 </body>
 </html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yönetici Paneli</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 400px; margin: auto; background-color: #f8f9fa; }
+        .kutu { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        .btn-mavi { background-color: #007bff; color: white; border: none; cursor: pointer; }
+        .btn-kirmizi { background-color: #dc3545; color: white; border: none; cursor: pointer; }
+        .liste-eleman { border-bottom: 1px solid #eee; padding: 10px 0; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <h2 style="text-align: center;">Yönetici Paneli</h2>
+    <button id="btn-cikis" class="btn-kirmizi">Çıkış Yap</button>
+
+    <!-- FİYAT GÜNCELLEME ALANI -->
+    <div class="kutu">
+        <h3>Menü Fiyatı Düzenle</h3>
+        <input type="number" id="g_menu_id" placeholder="Menü ID (Örn: 32)">
+        <input type="number" id="g_ogrenci_fiyat" placeholder="Yeni Öğrenci Fiyatı" step="0.01">
+        <input type="number" id="g_personel_fiyat" placeholder="Yeni Personel Fiyatı" step="0.01">
+        <button id="btn-guncelle" class="btn-mavi">Fiyatı Güncelle</button>
+        <p id="guncelle-mesaj" style="color: green; font-weight: bold; font-size: 14px;"></p>
+    </div>
+
+    <!-- İSTATİSTİK LİSTELEME ALANI -->
+    <div class="kutu">
+        <h3>Menü Doluluk ve Puanlar</h3>
+        <button id="btn-getir" class="btn-mavi">Verileri Yenile</button>
+        <div id="istatistik-liste"></div>
+    </div>
+
+    <script>
+        // Çıkış İşlemi
+        document.getElementById('btn-cikis').addEventListener('click', function() {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        });
+
+        // 1. Menü Güncelleme İsteği (PUT)
+        document.getElementById('btn-guncelle').addEventListener('click', function() {
+            const veriler = {
+                menu_id: document.getElementById('g_menu_id').value,
+                ogrenci_fiyati: document.getElementById('g_ogrenci_fiyat').value,
+                personel_fiyati: document.getElementById('g_personel_fiyat').value
+            };
+
+            fetch('/api/yonetici/menu/', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(veriler)
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('guncelle-mesaj').innerText = data.mesaj || data.hata;
+            });
+        });
+
+        // 2. İstatistikleri Getirme İsteği (GET)
+        document.getElementById('btn-getir').addEventListener('click', function() {
+            fetch('/api/yonetici/menu/')
+            .then(res => res.json())
+            .then(data => {
+                const listeDiv = document.getElementById('istatistik-liste');
+                listeDiv.innerHTML = '';
+                data.forEach(item => {
+                    listeDiv.innerHTML += `
+                        <div class="liste-eleman">
+                            <strong>Menü ID:</strong> ${item.menu_id} | <strong>Tarih:</strong> ${item.tarih} <br>
+                            <strong>Öğün:</strong> ${item.ogun} <br>
+                            <strong>Boş Yer:</strong> ${item.bos_yer} | <strong>Ort Puan:</strong> ${item.ortalama_puan.toFixed(1)}
+                        </div>`;
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>
