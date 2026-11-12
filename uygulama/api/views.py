@@ -3,7 +3,7 @@ import uuid
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import  Kullanicilar,Menuler, MenuYemekleri, YemekAlerjenleri,BakiyeHareketleri, Degerlendirmeler
+from .models import  Kullanicilar, Menuler, MenuYemekleri, YemekAlerjenleri, BakiyeHareketleri, Degerlendirmeler
 from .serializers import KullaniciSerializer
 from django.db import connections, utils
 from django.utils import timezone
@@ -142,6 +142,7 @@ class RezervasyonIptalView(APIView):
             if hata_kodu == 1644:
                 return Response({'hata': e.args[1]}, status=status.HTTP_400_BAD_REQUEST)
             return Response({'hata': 'Veritabanı hatası oluştu.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class HaftalikMenuView(APIView):
     def get(self, request):
         yemekhane_id = request.query_params.get('yemekhane_id')
@@ -262,7 +263,7 @@ class DegerlendirmeYapView(APIView):
         yorum = request.data.get('yorum', '')
 
         if not all([kullanici_id, menu_id, puan]):
-            return Response({'hata': 'Eksik parametre gönderildi.'}, status=400)
+            return Response({'hata': 'Eksik parametre gönderildi.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 1. Kural: Kullanıcı bu menüyü gerçekten tüketmiş mi?
         with connections['replica'].cursor() as cursor:
@@ -273,7 +274,7 @@ class DegerlendirmeYapView(APIView):
             kullanildi_mi = cursor.fetchone()
 
         if not kullanildi_mi:
-            return Response({'hata': 'Sadece kullandığınız (tükettiğiniz) menüleri değerlendirebilirsiniz.'}, status=400)
+            return Response({'hata': 'Sadece kullandığınız (tükettiğiniz) menüleri değerlendirebilirsiniz.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             Degerlendirmeler.objects.create(
@@ -285,7 +286,7 @@ class DegerlendirmeYapView(APIView):
             )
             return Response({'mesaj': 'Değerlendirmeniz başarıyla kaydedildi.'})
         except Exception as e:
-            return Response({'hata': f'Hata Detayı: {str(e)}'}, status=400)
+            return Response({'hata': f'Hata Detayı: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
         
 class YoneticiPaneliView(APIView):
     # Menü doluluk ve ortalama puan listeleme
@@ -322,12 +323,17 @@ class YoneticiPaneliView(APIView):
         if not all([yemekhane_id, tarih, ogun_id, ogrenci_fiyati, personel_fiyati]):
             return Response({'hata': 'Eksik bilgi.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        Menuler.objects.create(
-            yemekhane_id_id=yemekhane_id, tarih=tarih, ogun_id_id=ogun_id,
-            ogrenci_fiyati=ogrenci_fiyati, personel_fiyati=personel_fiyati,
-            olusturma=timezone.now(), guncelleme=timezone.now()
-        )
-        return Response({'mesaj': 'Menü oluşturuldu.'})
+        try:
+            with connections['default'].cursor() as cursor:
+                sorgu = """
+                    INSERT INTO menuler (yemekhane_id, tarih, ogun_id, ogrenci_fiyati, personel_fiyati)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+                cursor.execute(sorgu, [yemekhane_id, tarih, ogun_id, ogrenci_fiyati, personel_fiyati])
+                
+            return Response({'mesaj': 'Menü başarıyla oluşturuldu.'})
+        except Exception as e:
+            return Response({'hata': f'Sunucu hatası: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     # Menü düzenleme/güncelleme
     def put(self, request):

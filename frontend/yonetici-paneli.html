@@ -18,6 +18,18 @@
     <h2 style="text-align: center;">Yönetici Paneli</h2>
     <button id="btn-cikis" class="btn-kirmizi">Çıkış Yap</button>
 
+    <!-- YENİ MENÜ OLUŞTURMA ALANI -->
+    <div class="kutu">
+        <h3>Yeni Menü Oluştur</h3>
+        <input type="number" id="o_yemekhane_id" placeholder="Yemekhane ID (Örn: 1 veya 2)">
+        <input type="date" id="o_tarih">
+        <input type="number" id="o_ogun_id" placeholder="Öğün ID (1:Kahvaltı, 2:Öğle, 3:Akşam)">
+        <input type="number" id="o_ogrenci_fiyat" placeholder="Öğrenci Fiyatı" step="0.01">
+        <input type="number" id="o_personel_fiyat" placeholder="Personel Fiyatı" step="0.01">
+        <button id="btn-olustur" class="btn-mavi">Menü Oluştur</button>
+        <p id="olustur-mesaj" style="font-weight: bold; font-size: 14px;"></p>
+    </div>
+
     <!-- FİYAT GÜNCELLEME ALANI -->
     <div class="kutu">
         <h3>Menü Fiyatı Düzenle</h3>
@@ -41,7 +53,6 @@
             localStorage.clear();
             window.location.href = 'index.html';
         });
-
         // 1. Menü Güncelleme İsteği (PUT)
         document.getElementById('btn-guncelle').addEventListener('click', function() {
             const veriler = {
@@ -76,6 +87,33 @@
                             <strong>Boş Yer:</strong> ${item.bos_yer} | <strong>Ort Puan:</strong> ${item.ortalama_puan.toFixed(1)}
                         </div>`;
                 });
+            });
+        });
+        // 3. Yeni Menü Oluşturma İsteği (POST)
+        document.getElementById('btn-olustur').addEventListener('click', function() {
+            const veriler = {
+                yemekhane_id: document.getElementById('o_yemekhane_id').value,
+                tarih: document.getElementById('o_tarih').value,
+                ogun_id: document.getElementById('o_ogun_id').value,
+                ogrenci_fiyati: document.getElementById('o_ogrenci_fiyat').value,
+                personel_fiyati: document.getElementById('o_personel_fiyat').value
+            };
+
+            fetch('/api/yonetici/menu/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(veriler)
+            })
+            .then(res => res.json())
+            .then(data => {
+                const msj = document.getElementById('olustur-mesaj');
+                if (data.hata) {
+                    msj.style.color = 'red';
+                    msj.innerText = data.hata;
+                } else {
+                    msj.style.color = 'green';
+                    msj.innerText = data.mesaj + ' (ID: ' + data.menu_id + ')';
+                }
             });
         });
     </script>

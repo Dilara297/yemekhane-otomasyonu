@@ -70,20 +70,20 @@
                     return;
                 }
 
-               // 1. Döngüden HMEN ÖNCE rolü tarayıcıdan okuyoruz (Bu satır olmazsa menüler gelmez!)
-const kullaniciRol = localStorage.getItem('kullanici_rol');
+               // 1. Döngüden HMEN ÖNCE rolü tarayıcıdan okuyoruz 
+                const kullaniciRol = localStorage.getItem('kullanici_rol');
 
-data.forEach(menu => {
-    // 2. Kullanıcı rolüne göre fiyat belirleme (Türkçe ve İngilizce ihtimalini kapsar)
-    const fiyat = (kullaniciRol === 'öğrenci' || kullaniciRol === 'ogrenci' || kullaniciRol == '1') ? menu.ogrenci_fiyati : menu.personel_fiyati;
+                data.forEach(menu => {
+                 // 2. Kullanıcı rolüne göre fiyat belirleme
+                    const fiyat = (kullaniciRol === 'öğrenci' || kullaniciRol === 'ogrenci' || kullaniciRol == '1') ? menu.ogrenci_fiyati : menu.personel_fiyati;
     
-    // 3. Son saat kontrolü (Pasif düğme için)
-    const suAn = new Date();
-    const rezSonTarihSaat = new Date(`${menu.tarih}T${menu.rezervasyon_son}`);
-    const gectiMi = suAn > rezSonTarihSaat;
+                 // 3. Son saat kontrolü 
+                    const suAn = new Date();
+                    const rezSonTarihSaat = new Date(`${menu.tarih}T${menu.rezervasyon_son}`);
+                    const gectiMi = suAn > rezSonTarihSaat;
     
-    const disabledAttr = (gectiMi || menu.bos_yer <= 0) ? 'disabled' : '';
-    const butonMetni = gectiMi ? 'Süre Doldu' : (menu.bos_yer <= 0 ? 'Dolu' : 'Rezervasyon Yap');
+                    const disabledAttr = (gectiMi || menu.bos_yer <= 0) ? 'disabled' : '';
+                    const butonMetni = gectiMi ? 'Süre Doldu' : (menu.bos_yer <= 0 ? 'Dolu' : 'Rezervasyon Yap');
 
     // 4. Kartı ekrana basma (Tire işareti temizlendi)
     listeKutusu.innerHTML += `
