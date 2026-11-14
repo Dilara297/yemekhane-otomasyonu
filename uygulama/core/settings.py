@@ -99,6 +99,17 @@ DATABASES = {
         }
     }
 }
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+        "KEY_PREFIX": "",  # Django'nun başa eklediği ön eki kaldırır
+        "VERSION": None    # Django'nun başa eklediği :1: versiyon numarasını kaldırır
+    }
+}
 
 
 # Password validation
@@ -118,6 +129,7 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
 
 
 # Internationalization
@@ -147,3 +159,9 @@ MAILERS = {
     },
 }
 DATABASE_ROUTERS = ["core.db_router.YemekhaneRouter"]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'api.authentication.RedisTokenAuthentication',
+    ),
+}

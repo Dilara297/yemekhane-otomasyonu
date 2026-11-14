@@ -1,5 +1,7 @@
 import bcrypt
 import uuid
+import json
+import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -9,7 +11,13 @@ from django.db import connections, utils
 from django.utils import timezone
 from django.db.models import Avg
 
+from django_redis import get_redis_connection
+
 class LoginView(APIView):
+    # Giriş işlemi kimlik doğrulama gerektirmediği için boş bırakıyoruz
+    authentication_classes = []
+    permission_classes = []
+
     def post(self, request):
         eposta = request.data.get('eposta')
         sifre = request.data.get('sifre')
@@ -23,10 +31,15 @@ class LoginView(APIView):
         except Kullanicilar.DoesNotExist:
             return Response({'hata': 'Kullanıcı bulunamadı.'}, status=status.HTTP_404_NOT_FOUND)
             
-        # Şifre eşleşiyorsa (Yemek2026!)
+        # Şifre eşleşiyorsa
         if bcrypt.checkpw(sifre.encode('utf-8'), kullanici.sifre_hash.encode('utf-8')):
             serializer = KullaniciSerializer(kullanici)
-            token = str(uuid.uuid4()) # Aşama 3'te bu token'ı Redis'e yazacağız
+            token = str(uuid.uuid4())
+            
+            # Doğrudan Redis'e ham (raw) bağlantı kuruyoruz
+            redis_conn = get_redis_connection("default")
+            redis_conn.set(f"oturum:{token}", kullanici.id, ex=1800)
+            
             return Response({
                 'mesaj': 'Giriş başarılı',
                 'kullanici': serializer.data,
@@ -43,30 +56,36 @@ class GununMenusuView(APIView):
         ogun_id = request.query_params.get('ogun_id')
 
         if not all([yemekhane_id, tarih, ogun_id]):
-            return Response({'hata': 'yemekhane_id, tarih ve ogun_id parametreleri gerekli.'}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response({'hata': 'yemekhane_id, tarih ve ogun_id gerekli.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. KURAL: Redis Anahtar Formatı
+        redis_anahtari = f"menu:{yemekhane_id}:{tarih}:{ogun_id}"
+        redis_conn = get_redis_connection("default")
+
+        # Önce Redis'te bu menü var mı diye bakıyoruz
+        onbellek_veri = redis_conn.get(redis_anahtari)
+
+        if onbellek_veri:
+            # 3. KURAL: İkinci istek Redis'ten geliyor logu
+            print(f"LOG: [{redis_anahtari}] verisi REDIS'TEN (Önbellek) getirildi.", flush=True)
+            return Response(json.loads(onbellek_veri))
+
+        # Redis'te yoksa Veritabanından (Replica) çek ve logla
+        print(f"LOG: [{redis_anahtari}] verisi VERITABANINDAN çekildi ve Redis'e yazılacak.", flush=True)
+
         try:
-            # Okuma işlemi: replika veritabanından çekilir (db_router sayesinde otomatik)
-            menu = Menuler.objects.get(
-                yemekhane_id=yemekhane_id, tarih=tarih, ogun_id=ogun_id
-            )
+            menu = Menuler.objects.get(yemekhane_id=yemekhane_id, tarih=tarih, ogun_id=ogun_id)
         except Menuler.DoesNotExist:
             return Response({'hata': 'Bu kriterlere uygun menü bulunamadı.'}, status=status.HTTP_404_NOT_FOUND)
 
         toplam_kalori = 0
         yemekler_listesi = []
-
-        # Menüye ait yemekleri ve kategorilerini al
         menu_yemekleri = MenuYemekleri.objects.filter(menu=menu).select_related('yemek__kategori')
         
         for my in menu_yemekleri:
             yemek = my.yemek
-            
-            # Yemeğin alerjenlerini al
             alerjenler = YemekAlerjenleri.objects.filter(yemek=yemek).select_related('alerjen')
             alerjen_isimleri = [a.alerjen.ad for a in alerjenler]
-
-            # Toplam kaloriyi uygulamada topla kuralı
             toplam_kalori += yemek.kalori 
             
             yemekler_listesi.append({
@@ -78,16 +97,26 @@ class GununMenusuView(APIView):
                 'alerjenler': alerjen_isimleri
             })
         
-        # Yemekleri PDF'teki gibi kategori_sira ve isme göre sırala
         yemekler_listesi.sort(key=lambda x: (x['kategori_sira'], x['yemek_ad']))
 
-        return Response({
+        sonuc_dict = {
             'menu_id': menu.id,
-            'ogrenci_fiyati': menu.ogrenci_fiyati,
-            'personel_fiyati': menu.personel_fiyati,
+            'ogrenci_fiyati': float(menu.ogrenci_fiyati),
+            'personel_fiyati': float(menu.personel_fiyati),
             'toplam_kalori': toplam_kalori,
             'yemekler': yemekler_listesi
-        })
+        }
+
+        # 2. KURAL: Gün sonuna kadar (gece yarısına kadar) saniye hesabı
+        suan = datetime.datetime.now()
+        yarin = suan + datetime.timedelta(days=1)
+        gece_yarisi = datetime.datetime(yarin.year, yarin.month, yarin.day, 0, 0, 0)
+        kalan_saniye = int((gece_yarisi - suan).total_seconds())
+
+        # Veriyi JSON'a çevirip Redis'e gün sonu (TTL) süresiyle yazıyoruz
+        redis_conn.set(redis_anahtari, json.dumps(sonuc_dict), ex=kalan_saniye)
+
+        return Response(sonuc_dict)
         
 class RezervasyonYapView(APIView):
     def post(self, request):
@@ -350,6 +379,26 @@ class YoneticiPaneliView(APIView):
             menu.personel_fiyati = personel_fiyati
             menu.guncelleme = timezone.now()
             menu.save()
+            
+            from django_redis import get_redis_connection
+            redis_anahtari = f"menu:{menu.yemekhane_id}:{menu.tarih}:{menu.ogun_id}"
+            redis_conn = get_redis_connection("default")
+            redis_conn.delete(redis_anahtari)
+            
             return Response({'mesaj': 'Menü başarıyla güncellendi.'})
         except Menuler.DoesNotExist:
             return Response({'hata': 'Menü bulunamadı.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        
+class LogoutView(APIView):
+    def post(self, request):
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            try:
+                token = auth_header.split(' ')[1]
+                redis_conn = get_redis_connection("default")
+                redis_conn.delete(f"oturum:{token}")
+            except IndexError:
+                pass
+                
+        return Response({'mesaj': 'Başarıyla çıkış yapıldı.'})

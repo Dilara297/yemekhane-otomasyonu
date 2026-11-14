@@ -115,9 +115,15 @@
                 // Giriş başarılıysa kullanıcı bilgilerini tarayıcıya kaydet
                 localStorage.setItem('kullanici_id', data.kullanici.id);
                 localStorage.setItem('kullanici_rol', data.kullanici.rol);
+                localStorage.setItem('token', data.token);
                 
-                // Günün menüsü sayfasına yönlendir
-                window.location.href = 'gunun-menusu.html';
+                if (data.kullanici.rol === 'yönetici' || data.kullanici.rol === 'yonetici') {
+                    // Yönetici ise doğrudan kendi paneline gitsin
+                    window.location.href = 'yonetici-paneli.html';
+                } else {
+                    // Öğrenci veya personel ise menüye gitsin
+                    window.location.href = 'gunun-menusu.html';
+                }
             })
             .catch(error => {
                 hataKutusu.textContent = error.message;
