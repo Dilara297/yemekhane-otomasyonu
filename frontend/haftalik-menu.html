@@ -5,20 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Haftalık Menü ve Rezervasyon</title>
     <style>
+        /* Genel sayfa ve kart stilleri */
         body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
         .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h2 { text-align: center; color: #333; margin-top: 0; }
         select, button { width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; }
         .btn-mavi { background-color: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
         .btn-mavi:hover { background-color: #0056b3; }
+
+        /* Menü kartı detayları */
         .menu-karti { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 6px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .menu-baslik { font-weight: bold; font-size: 16px; color: #333; margin-bottom: 5px; }
         .menu-detay { font-size: 14px; color: #666; margin-bottom: 10px; }
         .fiyat { font-weight: bold; color: #28a745; font-size: 18px; }
         .bos-yer { color: #d32f2f; font-size: 13px; font-weight: bold; float: right; margin-top: 4px; }
-        .btn-rez { background-color: #28a745; color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+
+        /* Porsiyon seçimi ve buton stilleri */
+        .porsiyon-secim { margin-top: 8px; margin-bottom: 8px; font-size: 14px; padding: 7px; }
+        .kahvalti-not { font-size: 12px; color: #777; margin: 6px 0; }
+        .btn-rez { background-color: #28a745; color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 6px; margin-bottom: 0; }
         .btn-rez:disabled { background-color: #ccc; cursor: not-allowed; }
-        .nav-link { display: block; text-align: center; margin-top: 20px; color: #0056b3; text-decoration: none; font-size: 14px; }
+        .nav-link { display: block; text-align: center; margin-top: 15px; color: #0056b3; text-decoration: none; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -33,8 +40,10 @@
         
         <button id="getirBtn" class="btn-mavi">Menüleri Listele</button>
 
+        <!-- Haftalık menü kartları buraya yüklenecek -->
         <div id="listeKutusu" style="margin-top: 20px;"></div>
         
+        <a href="profil.html" class="nav-link">Profil ve Alerjen Ayarlarım →</a>
         <a href="rezervasyonlarim.html" class="nav-link">Rezervasyonlarım →</a>
         <button id="btn-cikis" class="btn-cikis">Çıkış Yap</button>
     </div>
@@ -42,16 +51,32 @@
     <script>
         const kullaniciId = localStorage.getItem('kullanici_id');
         const kullaniciRol = localStorage.getItem('kullanici_rol');
+        const token = localStorage.getItem('token');
 
         if (!kullaniciId) {
             window.location.href = 'index.html';
         }
 
+        // Token başlığını ekleyen yardımcı fonksiyon
+        function authHeaders(jsonMu = false) {
+            const h = {};
+            if (jsonMu) h['Content-Type'] = 'application/json';
+            if (token) h['Authorization'] = `Bearer ${token}`;
+            return h;
+        }
+
+        // Kullanıcı tam/yarım porsiyon değiştirdiğinde karttaki fiyatı anlık günceller (%60 kuralı)
+        window.fiyatGuncelle = function(menuId, tamFiyat) {
+            const secim = document.getElementById(`porsiyon-${menuId}`).value;
+            const gosterilecek = secim === 'yarim' ? (tamFiyat * 0.60).toFixed(2) : Number(tamFiyat).toFixed(2);
+            document.getElementById(`fiyat-${menuId}`).textContent = `${gosterilecek} TL`;
+        };
+
+        // Bugünden itibaren 7 günlük menüleri listeler
         document.getElementById('getirBtn').addEventListener('click', () => {
             const yhId = document.getElementById('yemekhaneSelect').value;
             const listeKutusu = document.getElementById('listeKutusu');
             
-            // Bugünü ve 6 gün sonrasını hesapla (YYYY-MM-DD)
             const bugun = new Date();
             const baslangic = bugun.toISOString().split('T')[0];
             const bitisTarihi = new Date(bugun);
@@ -60,66 +85,91 @@
 
             listeKutusu.innerHTML = '<em>Yükleniyor...</em>';
 
-            fetch(`/api/menu/haftalik/?yemekhane_id=${yhId}&baslangic=${baslangic}&bitis=${bitis}`)
+            fetch(`/api/menu/haftalik/?yemekhane_id=${yhId}&baslangic=${baslangic}&bitis=${bitis}`, {
+                headers: authHeaders()
+            })
             .then(res => res.json())
             .then(data => {
                 listeKutusu.innerHTML = '';
                 
-                if(data.length === 0 || data.hata) {
+                if (data.length === 0 || data.hata) {
                     listeKutusu.innerHTML = '<div style="color:red; text-align:center;">Bu tarih aralığında menü bulunamadı.</div>';
                     return;
                 }
 
-               // 1. Döngüden HMEN ÖNCE rolü tarayıcıdan okuyoruz 
-                const kullaniciRol = localStorage.getItem('kullanici_rol');
-
                 data.forEach(menu => {
-                 // 2. Kullanıcı rolüne göre fiyat belirleme
-                    const fiyat = (kullaniciRol === 'öğrenci' || kullaniciRol === 'ogrenci' || kullaniciRol == '1') ? menu.ogrenci_fiyati : menu.personel_fiyati;
-    
-                 // 3. Son saat kontrolü 
+                    // Kullanıcı rolüne göre öğrenci veya personel fiyatını seçiyoruz
+                    const tamFiyat = Number((kullaniciRol === 'öğrenci' || kullaniciRol === 'ogrenci' || kullaniciRol == '1')
+                        ? menu.ogrenci_fiyati
+                        : menu.personel_fiyati);
+                    const yarimFiyat = (tamFiyat * 0.60).toFixed(2);
+
+                    // Rezervasyon son saat kontrolü (v_menu_doluluk tam tarih-saat döner)
                     const suAn = new Date();
-                    const rezSonTarihSaat = new Date(`${menu.tarih}T${menu.rezervasyon_son}`);
+                    const rezSonTarihSaat = new Date(menu.rezervasyon_son);
                     const gectiMi = suAn > rezSonTarihSaat;
-    
+
                     const disabledAttr = (gectiMi || menu.bos_yer <= 0) ? 'disabled' : '';
                     const butonMetni = gectiMi ? 'Süre Doldu' : (menu.bos_yer <= 0 ? 'Dolu' : 'Rezervasyon Yap');
 
-    // 4. Kartı ekrana basma (Tire işareti temizlendi)
-    listeKutusu.innerHTML += `
-        <div class="menu-karti">
-            <div class="menu-baslik">${menu.tarih} ${menu.ogun}</div>
-            <div class="menu-detay">
-                <span class="fiyat">${fiyat} TL</span>
-                <span class="bos-yer">Kalan: ${menu.bos_yer}</span>
-            </div>
-            <button class="btn-rez" onclick="rezervasyonYap(${menu.menu_id})" ${disabledAttr}>
-                ${butonMetni}
-            </button>
-        </div>
-    `;
-});
+                    // Kahvaltıda (ogun_id = 1) yarım porsiyon seçeneği sunulmaz
+                    let porsiyonAlani = '';
+                    if (menu.ogun_id === 1) {
+                        porsiyonAlani = `<div class="kahvalti-not">Kahvaltıda yalnızca tam porsiyon seçilebilir.</div>`;
+                    } else {
+                        porsiyonAlani = `
+                            <select id="porsiyon-${menu.menu_id}" class="porsiyon-secim" onchange="fiyatGuncelle(${menu.menu_id}, ${tamFiyat})" ${disabledAttr}>
+                                <option value="tam">Tam Porsiyon (${tamFiyat.toFixed(2)} TL)</option>
+                                <option value="yarim">Yarım Porsiyon (${yarimFiyat} TL)</option>
+                            </select>
+                        `;
+                    }
+
+                    listeKutusu.innerHTML += `
+                        <div class="menu-karti">
+                            <div class="menu-baslik">${menu.tarih} ${menu.ogun}</div>
+                            <div class="menu-detay">
+                                <span class="fiyat" id="fiyat-${menu.menu_id}">${tamFiyat.toFixed(2)} TL</span>
+                                <span class="bos-yer">Kalan: ${menu.bos_yer}</span>
+                            </div>
+                            ${porsiyonAlani}
+                            <button class="btn-rez" onclick="rezervasyonYap(${menu.menu_id}, ${menu.ogun_id})" ${disabledAttr}>
+                                ${butonMetni}
+                            </button>
+                        </div>
+                    `;
+                });
             });
         });
 
-        // Rezervasyon Yapma Fonksiyonu
-        function rezervasyonYap(menuId) {
+        // Seçilen menü ve porsiyon bilgisiyle rezervasyon isteği gönderir
+        window.rezervasyonYap = function(menuId, ogunId) {
+            const porsiyonSelect = document.getElementById(`porsiyon-${menuId}`);
+            const porsiyon = (ogunId === 1 || !porsiyonSelect) ? 'tam' : porsiyonSelect.value;
+
             fetch('/api/rezervasyon/yap/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kullanici_id: kullaniciId, menu_id: menuId })
+                headers: authHeaders(true),
+                body: JSON.stringify({
+                    kullanici_id: kullaniciId,
+                    menu_id: menuId,
+                    porsiyon: porsiyon
+                })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.hata) {
                     alert('Hata: ' + data.hata);
                 } else {
-                    alert(`Başarılı! Kesilen Ücret: ${data.kesilen_ucret} TL. Güncel Bakiye: ${data.guncel_bakiye} TL`);
-                    document.getElementById('getirBtn').click(); // Listeyi yenile
+                    const porsiyonMetni = data.porsiyon === 'yarim' ? 'Yarım Porsiyon' : 'Tam Porsiyon';
+                    alert(`Başarılı! (${porsiyonMetni}) Kesilen Ücret: ${data.kesilen_ucret} TL. Güncel Bakiye: ${data.guncel_bakiye} TL`);
+                    document.getElementById('getirBtn').click(); // Güncel boş yer sayısı için listeyi yenile
                 }
             })
-            .catch(err => alert('Sistemsel bir hata oluştu.'));
-        }
+            .catch(() => alert('Sistemsel bir hata oluştu.'));
+        };
+
+        // Çıkış işlemi
         document.getElementById('btn-cikis').addEventListener('click', function() {
             localStorage.removeItem('kullanici_id');
             localStorage.removeItem('token');

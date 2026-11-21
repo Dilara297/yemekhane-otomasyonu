@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import LoginView, GununMenusuView, LogoutView, RezervasyonYapView, RezervasyonIptalView, HaftalikMenuView, RezervasyonlarimView,BakiyeYukleView,BakiyeGecmisiView,DegerlendirmeYapView,YoneticiPaneliView
+from .views import LoginView, GununMenusuView, LogoutView, ProfilAlerjenView, RezervasyonYapView, RezervasyonIptalView, HaftalikMenuView, RezervasyonlarimView,BakiyeYukleView,BakiyeGecmisiView,DegerlendirmeYapView,YoneticiPaneliView
 
 urlpatterns = [
     path('giris/', LoginView.as_view(), name='giris'),
@@ -13,4 +13,5 @@ urlpatterns = [
     path('degerlendirme/', DegerlendirmeYapView.as_view(), name='degerlendirme'),
     path('yonetici/menu/', YoneticiPaneliView.as_view(), name='yonetici_menu'),
     path('api/cikis/', LogoutView.as_view(), name='cikis'),
+    path('profil/alerjenler/', ProfilAlerjenView.as_view(), name='profil_alerjenler'),
 ]

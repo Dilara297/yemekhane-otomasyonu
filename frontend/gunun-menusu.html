@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Günün Menüsü</title>
     <style>
+        /* Genel sayfa düzeni */
         body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
         .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h2 { text-align: center; color: #333; margin-top: 0; }
@@ -13,14 +14,22 @@
         select, button { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; }
         button { background-color: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
         button:hover { background-color: #218838; }
+
+        /* Menü ve yemek listesi stilleri */
         .menu-karti { background: #fff8e1; border-left: 4px solid #ffc107; padding: 15px; margin-top: 20px; border-radius: 4px; display: none; }
-        .yemek-kalemi { border-bottom: 1px dashed #ccc; padding: 8px 0; }
+        .yemek-kalemi { border-bottom: 1px dashed #ccc; padding: 8px 6px; }
         .yemek-kalemi:last-child { border-bottom: none; }
-        .rozeti { font-size: 12px; padding: 2px 6px; border-radius: 10px; margin-left: 5px; color: white; display: inline-block; }
+
+        /* Kullanıcının alerjeniyle eşleşen yemekler için kırmızı uyarı vurgusu */
+        .yemek-uyari { background-color: #fdecea; border-left: 4px solid #dc3545; border-radius: 4px; margin: 4px 0; }
+        .uyari-metni { color: #b71c1c; font-size: 12px; font-weight: bold; margin-top: 4px; }
+
+        /* Vejetaryen ve alerjen bilgi rozetleri */
+        .rozeti { font-size: 11px; padding: 2px 6px; border-radius: 10px; margin-left: 5px; color: white; display: inline-block; }
         .rozeti.vejetaryen { background-color: #28a745; }
-        .rozeti.alerjen { background-color: #dc3545; }
+        .rozeti.alerjen { background-color: #6c757d; }
         .toplam-kalori { margin-top: 15px; font-weight: bold; text-align: right; color: #d32f2f; }
-        .nav-link { display: block; text-align: center; margin-top: 20px; color: #0056b3; text-decoration: none; font-size: 14px; }
+        .nav-link { display: block; text-align: center; margin-top: 15px; color: #0056b3; text-decoration: none; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -28,45 +37,52 @@
     <div class="container">
         <h2>Günün Menüsü</h2>
         
+        <!-- Yemekhane ve öğün filtreleri -->
         <div class="form-group">
             <label for="yemekhaneSelect">Yemekhane Seçin</label>
-            <select id="yemekhaneSelect">
-                <!-- API'den doldurulacak -->
-            </select>
+            <select id="yemekhaneSelect"></select>
         </div>
 
         <div class="form-group">
             <label for="ogunSelect">Öğün Seçin</label>
-            <select id="ogunSelect">
-                <!-- API'den doldurulacak -->
-            </select>
+            <select id="ogunSelect"></select>
         </div>
 
         <button id="menuGetirBtn">Menüyü Getir</button>
 
+        <!-- Seçilen menünün yemekleri burada listelenir -->
         <div id="menuSonuc" class="menu-karti">
             <h3 id="tarihBaslik" style="margin-top:0; font-size: 16px;"></h3>
             <div id="yemekListesi"></div>
             <div class="toplam-kalori" id="toplamKaloriYazisi"></div>
         </div>
         
+        <a href="profil.html" class="nav-link">Profil ve Alerjen Ayarlarım →</a>
         <a href="haftalik-menu.html" class="nav-link">Haftalık Menü ve Rezervasyon →</a>
         <button id="btn-cikis" style="background-color: red; color: white; padding: 5px 10px; border: none; cursor: pointer;">Çıkış Yap</button>
     </div>
 
     <script>
-        // Sayfa yüklendiğinde çalışacaklar
+        const kullaniciId = localStorage.getItem('kullanici_id');
+        const token = localStorage.getItem('token');
+
         document.addEventListener('DOMContentLoaded', () => {
-            
-            // 1. Kullanıcı girişi kontrolü (Eğer login değilse index'e at)
-            if (!localStorage.getItem('kullanici_id')) {
+            // Oturum kontrolü: giriş yapılmamışsa index.html'e yönlendir
+            if (!kullaniciId) {
                 window.location.href = 'index.html';
                 return;
             }
 
-            // 2. Yemekhane ve Öğün seçeneklerini API'den çek (Şimdilik sabit mock verilerle listeleri dolduruyoruz, API bağlamasını birazdan yapacağız)
-            const yemekhaneler = [{id: 1, ad: 'Merkez Yemekhanesi'}, {id: 2, ad: 'Mühendislik Fakültesi'}];
-            const ogunler = [{id: 1, ad: 'Öğle Yemeği'}, {id: 2, ad: 'Akşam Yemeği'}];
+            // Veritabanındaki ID'lerle birebir uyumlu yemekhane ve öğün listeleri
+            const yemekhaneler = [
+                {id: 1, ad: 'Merkez Yemekhanesi'},
+                {id: 2, ad: 'Mühendislik Fakültesi'}
+            ];
+            const ogunler = [
+                {id: 1, ad: 'Kahvaltı'},
+                {id: 2, ad: 'Öğle Yemeği'},
+                {id: 3, ad: 'Akşam Yemeği'}
+            ];
 
             const yhSelect = document.getElementById('yemekhaneSelect');
             yemekhaneler.forEach(y => yhSelect.add(new Option(y.ad, y.id)));
@@ -75,12 +91,10 @@
             ogunler.forEach(o => oSelect.add(new Option(o.ad, o.id)));
         });
 
-        // "Menüyü Getir" butonuna tıklandığında
+        // "Menüyü Getir" butonuna tıklandığında ilgili günün menüsünü API'den çeker
         document.getElementById('menuGetirBtn').addEventListener('click', () => {
             const yemekhane_id = document.getElementById('yemekhaneSelect').value;
             const ogun_id = document.getElementById('ogunSelect').value;
-            
-            // Bugünün tarihini YYYY-MM-DD formatında al
             const bugun = new Date().toISOString().split('T')[0]; 
             
             const sonucKutusu = document.getElementById('menuSonuc');
@@ -89,8 +103,14 @@
             yemekListesi.innerHTML = '<em>Yükleniyor...</em>';
             sonucKutusu.style.display = 'block';
 
-            // API'ye İstek Atıyoruz
-            fetch(`/api/menu/?yemekhane_id=${yemekhane_id}&ogun_id=${ogun_id}&tarih=${bugun}`)
+            // Redis oturum süresinin yenilenmesi için Bearer token gönderiyoruz
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            // Alerjen eşleştirmesi yapılabilmesi için kullanici_id parametresini de ekliyoruz
+            fetch(`/api/menu/?yemekhane_id=${yemekhane_id}&ogun_id=${ogun_id}&tarih=${bugun}&kullanici_id=${kullaniciId}`, {
+                headers: headers
+            })
             .then(response => {
                 if (!response.ok) throw new Error('Menü bulunamadı.');
                 return response.json();
@@ -101,37 +121,46 @@
                 
                 let toplamKcal = 0;
 
-                // Gelen yemekleri HTML'e çevir
+                // Menüdeki her yemeği rozetleri ve varsa alerjen uyarısıyla ekrana basıyoruz
                 data.yemekler.forEach(yemek => {
                     toplamKcal += yemek.kalori;
                     
                     let rozetler = '';
                     if (yemek.vejetaryen) rozetler += `<span class="rozeti vejetaryen">V</span>`;
-                    if (yemek.alerjen) rozetler += `<span class="rozeti alerjen">Alerjen</span>`;
+                    if (yemek.alerjenler && yemek.alerjenler.length > 0) {
+                        rozetler += `<span class="rozeti alerjen">${yemek.alerjenler.join(', ')}</span>`;
+                    }
+
+                    // Backend'den alerjen_uyarisi true gelirse kırmızı uyarı kutusu gösterilir
+                    const uyariSinifi = yemek.alerjen_uyarisi ? 'yemek-uyari' : '';
+                    const uyariBloku = yemek.alerjen_uyarisi
+                        ? `<div class="uyari-metni">⚠️ ALERJEN UYARISI: ${yemek.eslesen_alerjenler.join(', ')} içeriyor!</div>`
+                        : '';
 
                     yemekListesi.innerHTML += `
-                        <div class="yemek-kalemi">
-                            ${yemek.yemek_ad} ${rozetler}
+                        <div class="yemek-kalemi ${uyariSinifi}">
+                            <strong>${yemek.yemek_ad}</strong> ${rozetler}
                             <div style="font-size:12px; color:#777;">${yemek.kalori} kcal</div>
+                            ${uyariBloku}
                         </div>
                     `;
                 });
 
                 document.getElementById('toplamKaloriYazisi').textContent = `Toplam: ${toplamKcal} kcal`;
             })
-            .catch(error => {
+            .catch(() => {
                 yemekListesi.innerHTML = `<span style="color:red;">Bugün için bu kriterlerde menü tanımlanmamış.</span>`;
                 document.getElementById('toplamKaloriYazisi').textContent = '';
                 document.getElementById('tarihBaslik').textContent = '';
             });
         });
+
+        // Çıkış işlemi
         document.getElementById('btn-cikis').addEventListener('click', function() {
-        // Kullanıcı verilerini tarayıcıdan sil
-        localStorage.removeItem('kullanici_id');
-        localStorage.removeItem('token');
-        // Giriş sayfasına (index.html) yönlendir
-        window.location.href = 'index.html'; 
-    });
+            localStorage.removeItem('kullanici_id');
+            localStorage.removeItem('token');
+            window.location.href = 'index.html'; 
+        });
     </script>
 </body>
 </html>

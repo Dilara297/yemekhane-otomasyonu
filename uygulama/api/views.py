@@ -5,7 +5,7 @@ import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import  Kullanicilar, Menuler, MenuYemekleri, YemekAlerjenleri, BakiyeHareketleri, Degerlendirmeler
+from .models import  Kullanicilar, Menuler, MenuYemekleri, YemekAlerjenleri, BakiyeHareketleri, Degerlendirmeler,Alerjenler
 from .serializers import KullaniciSerializer
 from django.db import connections, utils
 from django.utils import timezone
@@ -54,6 +54,8 @@ class GununMenusuView(APIView):
         yemekhane_id = request.query_params.get('yemekhane_id')
         tarih = request.query_params.get('tarih')
         ogun_id = request.query_params.get('ogun_id')
+        # AŞAMA 4: Kullanıcıya özel alerjen uyarısı için kullanici_id alınır
+        kullanici_id = request.query_params.get('kullanici_id') or (request.user.id if request.user and request.user.is_authenticated else None)
 
         if not all([yemekhane_id, tarih, ogun_id]):
             return Response({'hata': 'yemekhane_id, tarih ve ogun_id gerekli.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -68,60 +70,83 @@ class GununMenusuView(APIView):
         if onbellek_veri:
             # 3. KURAL: İkinci istek Redis'ten geliyor logu
             print(f"LOG: [{redis_anahtari}] verisi REDIS'TEN (Önbellek) getirildi.", flush=True)
-            return Response(json.loads(onbellek_veri))
+            sonuc_dict = json.loads(onbellek_veri)
+        else:
+            # Redis'te yoksa Veritabanından (Replica) çek ve logla
+            print(f"LOG: [{redis_anahtari}] verisi VERITABANINDAN çekildi ve Redis'e yazılacak.", flush=True)
 
-        # Redis'te yoksa Veritabanından (Replica) çek ve logla
-        print(f"LOG: [{redis_anahtari}] verisi VERITABANINDAN çekildi ve Redis'e yazılacak.", flush=True)
+            try:
+                menu = Menuler.objects.get(yemekhane_id=yemekhane_id, tarih=tarih, ogun_id=ogun_id)
+            except Menuler.DoesNotExist:
+                return Response({'hata': 'Bu kriterlere uygun menü bulunamadı.'}, status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            menu = Menuler.objects.get(yemekhane_id=yemekhane_id, tarih=tarih, ogun_id=ogun_id)
-        except Menuler.DoesNotExist:
-            return Response({'hata': 'Bu kriterlere uygun menü bulunamadı.'}, status=status.HTTP_404_NOT_FOUND)
-
-        toplam_kalori = 0
-        yemekler_listesi = []
-        menu_yemekleri = MenuYemekleri.objects.filter(menu=menu).select_related('yemek__kategori')
-        
-        for my in menu_yemekleri:
-            yemek = my.yemek
-            alerjenler = YemekAlerjenleri.objects.filter(yemek=yemek).select_related('alerjen')
-            alerjen_isimleri = [a.alerjen.ad for a in alerjenler]
-            toplam_kalori += yemek.kalori 
+            toplam_kalori = 0
+            yemekler_listesi = []
+            menu_yemekleri = MenuYemekleri.objects.filter(menu=menu).select_related('yemek__kategori')
             
-            yemekler_listesi.append({
-                'yemek_ad': yemek.ad,
-                'kategori': yemek.kategori.ad,
-                'kategori_sira': yemek.kategori.sira,
-                'kalori': yemek.kalori,
-                'vejetaryen': bool(yemek.vejetaryen),
-                'alerjenler': alerjen_isimleri
-            })
-        
-        yemekler_listesi.sort(key=lambda x: (x['kategori_sira'], x['yemek_ad']))
+            for my in menu_yemekleri:
+                yemek = my.yemek
+                alerjenler = YemekAlerjenleri.objects.filter(yemek=yemek).select_related('alerjen')
+                alerjen_isimleri = [a.alerjen.ad for a in alerjenler]
+                alerjen_idler = [a.alerjen.id for a in alerjenler]
+                toplam_kalori += yemek.kalori 
+                
+                yemekler_listesi.append({
+                    'yemek_ad': yemek.ad,
+                    'kategori': yemek.kategori.ad,
+                    'kategori_sira': yemek.kategori.sira,
+                    'kalori': yemek.kalori,
+                    'vejetaryen': bool(yemek.vejetaryen),
+                    'alerjenler': alerjen_isimleri,
+                    'alerjen_idler': alerjen_idler
+                })
+            
+            yemekler_listesi.sort(key=lambda x: (x['kategori_sira'], x['yemek_ad']))
 
-        sonuc_dict = {
-            'menu_id': menu.id,
-            'ogrenci_fiyati': float(menu.ogrenci_fiyati),
-            'personel_fiyati': float(menu.personel_fiyati),
-            'toplam_kalori': toplam_kalori,
-            'yemekler': yemekler_listesi
-        }
+            sonuc_dict = {
+                'menu_id': menu.id,
+                'ogun_id': int(menu.ogun_id),
+                'ogrenci_fiyati': float(menu.ogrenci_fiyati),
+                'personel_fiyati': float(menu.personel_fiyati),
+                'toplam_kalori': toplam_kalori,
+                'yemekler': yemekler_listesi
+            }
 
-        # 2. KURAL: Gün sonuna kadar (gece yarısına kadar) saniye hesabı
-        suan = datetime.datetime.now()
-        yarin = suan + datetime.timedelta(days=1)
-        gece_yarisi = datetime.datetime(yarin.year, yarin.month, yarin.day, 0, 0, 0)
-        kalan_saniye = int((gece_yarisi - suan).total_seconds())
+            # 2. KURAL: Gün sonuna kadar (gece yarısına kadar) saniye hesabı
+            suan = datetime.datetime.now()
+            yarin = suan + datetime.timedelta(days=1)
+            gece_yarisi = datetime.datetime(yarin.year, yarin.month, yarin.day, 0, 0, 0)
+            kalan_saniye = int((gece_yarisi - suan).total_seconds())
 
-        # Veriyi JSON'a çevirip Redis'e gün sonu (TTL) süresiyle yazıyoruz
-        redis_conn.set(redis_anahtari, json.dumps(sonuc_dict), ex=kalan_saniye)
+            # Veriyi JSON'a çevirip Redis'e gün sonu (TTL) süresiyle yazıyoruz
+            redis_conn.set(redis_anahtari, json.dumps(sonuc_dict), ex=kalan_saniye)
+
+        # AŞAMA 4: Kullanıcının seçtiği alerjenleri replikadan çekip yemeklerle eşleştiriyoruz
+        kullanici_alerjen_map = {}
+        if kullanici_id:
+            with connections['replica'].cursor() as cursor:
+                cursor.execute("""
+                    SELECT a.id, a.ad
+                    FROM kullanici_alerjenleri ka
+                    JOIN alerjenler a ON a.id = ka.alerjen_id
+                    WHERE ka.kullanici_id = %s
+                """, [kullanici_id])
+                kullanici_alerjen_map = {row[0]: row[1] for row in cursor.fetchall()}
+
+        for yemek in sonuc_dict.get('yemekler', []):
+            yemek_alerjen_idleri = yemek.get('alerjen_idler', [])
+            eslesenler = [kullanici_alerjen_map[aid] for aid in yemek_alerjen_idleri if aid in kullanici_alerjen_map]
+            yemek['alerjen_uyarisi'] = len(eslesenler) > 0
+            yemek['eslesen_alerjenler'] = eslesenler
 
         return Response(sonuc_dict)
+    
         
 class RezervasyonYapView(APIView):
     def post(self, request):
         kullanici_id = request.data.get('kullanici_id')
         menu_id = request.data.get('menu_id')
+        porsiyon = request.data.get('porsiyon', 'tam')
         
         if not kullanici_id or not menu_id:
             return Response({'hata': 'kullanici_id ve menu_id gereklidir.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -129,14 +154,15 @@ class RezervasyonYapView(APIView):
         try:
             # Yazma işlemi: connections['default'] üzerinden kaynağa gider
             with connections['default'].cursor() as cursor:
-                cursor.execute("CALL sp_rezervasyon_yap(%s, %s)", [kullanici_id, menu_id])
-                row = cursor.fetchone() # sp'den dönen: rezervasyon_id, ucret, bakiye
+                cursor.execute("CALL sp_rezervasyon_yap(%s, %s, %s)", [kullanici_id, menu_id, porsiyon])
+                row = cursor.fetchone() # sp'den dönen: rezervasyon_id, ucret, porsiyon, bakiye
                 
             return Response({
                 'mesaj': 'Rezervasyon başarılı.',
                 'rezervasyon_id': row[0],
                 'kesilen_ucret': row[1],
-                'guncel_bakiye': row[2]
+                'porsiyon': row[2],
+                'guncel_bakiye': row[3]
             })
         except utils.OperationalError as e:
             hata_kodu = e.args[0]
@@ -146,6 +172,7 @@ class RezervasyonYapView(APIView):
             if hata_kodu == 1644:
                 return Response({'hata': hata_mesaji}, status=status.HTTP_400_BAD_REQUEST)
             return Response({'hata': 'Veritabanı hatası oluştu.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 class RezervasyonIptalView(APIView):
     def post(self, request):
@@ -186,7 +213,7 @@ class HaftalikMenuView(APIView):
             # v_menu_doluluk view'ını kullanarak boş yer ve son saati alıyoruz
             sorgu = """
                 SELECT m.id, m.tarih, o.ad as ogun, m.ogrenci_fiyati, m.personel_fiyati,
-                       v.bos_yer, v.rezervasyon_son
+                       v.bos_yer, v.rezervasyon_son, m.ogun_id
                 FROM menuler m
                 JOIN ogunler o ON m.ogun_id = o.id
                 JOIN v_menu_doluluk v ON m.id = v.menu_id
@@ -205,7 +232,8 @@ class HaftalikMenuView(APIView):
                 'ogrenci_fiyati': satir[3],
                 'personel_fiyati': satir[4],
                 'bos_yer': satir[5],
-                'rezervasyon_son': satir[6]
+                'rezervasyon_son': satir[6],
+                'ogun_id': satir[7]
             })
 
         return Response(sonuc)
@@ -220,7 +248,7 @@ class RezervasyonlarimView(APIView):
         with connections['replica'].cursor() as cursor:
             # Aktif, kullanıldı, iptal durumları ve iptal süresi (rezervasyon_son) bilgisi
             sorgu = """
-                SELECT r.id, r.durum, r.ucret, m.tarih, o.ad as ogun, v.rezervasyon_son
+                SELECT r.id, r.durum, r.ucret, m.tarih, o.ad as ogun, v.rezervasyon_son, r.porsiyon
                 FROM rezervasyonlar r
                 JOIN menuler m ON r.menu_id = m.id
                 JOIN ogunler o ON m.ogun_id = o.id
@@ -239,7 +267,8 @@ class RezervasyonlarimView(APIView):
                 'ucret': satir[2],
                 'tarih': satir[3],
                 'ogun': satir[4],
-                'rezervasyon_son': satir[5]
+                'rezervasyon_son': satir[5],
+                'porsiyon': satir[6]
             })
 
         return Response(sonuc)
@@ -402,3 +431,42 @@ class LogoutView(APIView):
                 pass
                 
         return Response({'mesaj': 'Başarıyla çıkış yapıldı.'})
+    
+    
+class ProfilAlerjenView(APIView):
+    # Tüm alerjenleri ve kullanıcının mevcut seçimlerini replica üzerinden getirir
+    def get(self, request):
+        kullanici_id = request.query_params.get('kullanici_id')
+        if not kullanici_id:
+            return Response({'hata': 'kullanici_id gerekli.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        tum_alerjenler = list(Alerjenler.objects.all().order_by('id').values('id', 'ad'))
+        
+        with connections['replica'].cursor() as cursor:
+            cursor.execute("SELECT alerjen_id FROM kullanici_alerjenleri WHERE kullanici_id = %s", [kullanici_id])
+            secili_idler = [row[0] for row in cursor.fetchall()]
+
+        return Response({
+            'tum_alerjenler': tum_alerjenler,
+            'secili_alerjenler': secili_idler
+        })
+
+    # Kullanıcının alerjen tercihlerini kaynak (default) veritabanında günceller
+    def post(self, request):
+        kullanici_id = request.data.get('kullanici_id')
+        alerjen_idler = request.data.get('alerjen_idler', [])
+
+        if not kullanici_id:
+            return Response({'hata': 'kullanici_id gerekli.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with connections['default'].cursor() as cursor:
+                cursor.execute("DELETE FROM kullanici_alerjenleri WHERE kullanici_id = %s", [kullanici_id])
+                for aid in alerjen_idler:
+                    cursor.execute(
+                        "INSERT INTO kullanici_alerjenleri (kullanici_id, alerjen_id) VALUES (%s, %s)",
+                        [kullanici_id, int(aid)]
+                    )
+            return Response({'mesaj': 'Alerjen tercihleriniz güncellendi.'})
+        except Exception as e:
+            return Response({'hata': f'Güncelleme hatası: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Profil ve Alerjen Ayarları</title>
+    <style>
+        /* Genel sayfa ve kart düzeni */
+        body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        .aciklama { font-size: 13px; color: #666; margin-bottom: 15px; text-align: center; }
+
+        /* Alerjen seçim kutuları */
+        .alerjen-listesi { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+        .alerjen-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #eee; border-radius: 4px; background: #fafafa; cursor: pointer; }
+        .alerjen-item input { width: auto; margin: 0; }
+
+        /* Buton ve yönlendirme stilleri */
+        button { width: 100%; padding: 10px; border-radius: 4px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .btn-kaydet { background-color: #28a745; color: white; }
+        .btn-kaydet:hover { background-color: #218838; }
+        .btn-cikis { background-color: #dc3545; color: white; margin-top: 10px; padding: 8px; font-size: 14px; }
+        .mesaj { text-align: center; margin-top: 12px; font-size: 14px; font-weight: bold; }
+        .nav-link { display: block; text-align: center; margin-top: 15px; color: #0056b3; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Profil ve Alerjenlerim</h2>
+        <p class="aciklama">Alerjiniz olan maddeleri seçin. Menüde bu maddeleri içeren yemekler uyarıyla gösterilecektir.</p>
+
+        <!-- API'den gelen alerjenler buraya checkbox olarak eklenecek -->
+        <div id="alerjenListesi" class="alerjen-listesi">
+            <em>Yükleniyor...</em>
+        </div>
+
+        <button id="kaydetBtn" class="btn-kaydet">Tercihleri Kaydet</button>
+        <div id="durumMesaji" class="mesaj"></div>
+
+        <!-- Sayfalar arası geçiş linkleri -->
+        <a href="gunun-menusu.html" class="nav-link">← Günün Menüsüne Dön</a>
+        <a href="haftalik-menu.html" class="nav-link">Haftalık Menü ve Rezervasyon →</a>
+        <button id="btn-cikis" class="btn-cikis">Çıkış Yap</button>
+    </div>
+
+    <script>
+        // Tarayıcı belleğinden oturum bilgilerini alıyoruz
+        const kullaniciId = localStorage.getItem('kullanici_id');
+        const token = localStorage.getItem('token');
+
+        // Giriş yapılmamışsa giriş sayfasına yönlendir
+        if (!kullaniciId) {
+            window.location.href = 'index.html';
+        }
+
+        // API isteklerine Authorization (Bearer token) başlığını ekleyen yardımcı fonksiyon
+        function authHeaders(jsonMu = false) {
+            const h = {};
+            if (jsonMu) h['Content-Type'] = 'application/json';
+            if (token) h['Authorization'] = `Bearer ${token}`;
+            return h;
+        }
+
+        // Sayfa açıldığında tüm alerjenleri ve kullanıcının mevcut seçimlerini API'den çekiyoruz
+        document.addEventListener('DOMContentLoaded', () => {
+            const listeKutusu = document.getElementById('alerjenListesi');
+
+            fetch(`/api/profil/alerjenler/?kullanici_id=${kullaniciId}`, {
+                headers: authHeaders()
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.hata) {
+                    listeKutusu.innerHTML = `<span style="color:red;">${data.hata}</span>`;
+                    return;
+                }
+
+                // Kullanıcının daha önce seçtiği alerjen ID'lerini hızlı kontrol için Set'e alıyoruz
+                const seciliSet = new Set(data.secili_alerjenler || []);
+                listeKutusu.innerHTML = '';
+
+                // Tüm alerjenleri ekrana checkbox olarak basıyoruz
+                data.tum_alerjenler.forEach(alerjen => {
+                    const checked = seciliSet.has(alerjen.id) ? 'checked' : '';
+                    listeKutusu.innerHTML += `
+                        <label class="alerjen-item">
+                            <input type="checkbox" name="alerjen" value="${alerjen.id}" ${checked}>
+                            <span>${alerjen.ad}</span>
+                        </label>
+                    `;
+                });
+            })
+            .catch(() => {
+                listeKutusu.innerHTML = '<span style="color:red;">Alerjen listesi alınamadı.</span>';
+            });
+        });
+
+        // Kaydet butonuna basıldığında seçili alerjen ID'lerini veritabanına gönderiyoruz
+        document.getElementById('kaydetBtn').addEventListener('click', () => {
+            const secilenler = Array.from(document.querySelectorAll('input[name="alerjen"]:checked'))
+                .map(cb => parseInt(cb.value));
+
+            const mesajKutusu = document.getElementById('durumMesaji');
+            mesajKutusu.textContent = 'Kaydediliyor...';
+            mesajKutusu.style.color = '#666';
+
+            fetch('/api/profil/alerjenler/', {
+                method: 'POST',
+                headers: authHeaders(true),
+                body: JSON.stringify({
+                    kullanici_id: kullaniciId,
+                    alerjen_idler: secilenler
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.hata) {
+                    mesajKutusu.textContent = data.hata;
+                    mesajKutusu.style.color = '#dc3545';
+                } else {
+                    mesajKutusu.textContent = data.mesaj || 'Alerjen tercihleriniz kaydedildi.';
+                    mesajKutusu.style.color = '#28a745';
+                }
+            })
+            .catch(() => {
+                mesajKutusu.textContent = 'Kayıt sırasında bağlantı hatası oluştu.';
+                mesajKutusu.style.color = '#dc3545';
+            });
+        });
+
+        // Çıkış yapıldığında tarayıcıdaki oturum verilerini temizle
+        document.getElementById('btn-cikis').addEventListener('click', function() {
+            localStorage.removeItem('kullanici_id');
+            localStorage.removeItem('token');
+            window.location.href = 'index.html';
+        });
+    </script>
+</body>
+</html>

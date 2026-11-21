@@ -94,6 +94,7 @@ class Rezervasyonlar(models.Model):
     kullanici = models.ForeignKey(Kullanicilar, models.DO_NOTHING)
     menu = models.ForeignKey(Menuler, models.DO_NOTHING)
     durum = models.CharField(max_length=10)
+    porsiyon = models.CharField(max_length=5, default='tam')
     ucret = models.DecimalField(max_digits=8, decimal_places=2)
     olusturma = models.DateTimeField()
     kullanma_zamani = models.DateTimeField(blank=True, null=True)
@@ -103,6 +104,15 @@ class Rezervasyonlar(models.Model):
         managed = False
         db_table = 'rezervasyonlar'
         unique_together = (('kullanici', 'menu'),)
+        
+class KullaniciAlerjenleri(models.Model):
+    pk = models.CompositePrimaryKey('kullanici_id', 'alerjen_id')
+    kullanici = models.ForeignKey(Kullanicilar, models.DB_CASCADE)
+    alerjen = models.ForeignKey(Alerjenler, models.DB_CASCADE)
+
+    class Meta:
+        managed = False
+        db_table = 'kullanici_alerjenleri'
 
 
 class YemekAlerjenleri(models.Model):
