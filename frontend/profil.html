@@ -130,11 +130,18 @@
             });
         });
 
-        // Çıkış yapıldığında tarayıcıdaki oturum verilerini temizle
+        // Çıkış yapıldığında önce Redis'teki oturumu sil, sonra tarayıcıyı temizle
         document.getElementById('btn-cikis').addEventListener('click', function() {
-            localStorage.removeItem('kullanici_id');
-            localStorage.removeItem('token');
-            window.location.href = 'index.html';
+            const aktifToken = localStorage.getItem('token');
+            fetch('/api/cikis/', {
+                method: 'POST',
+                headers: aktifToken ? { 'Authorization': `Bearer ${aktifToken}` } : {}
+            }).finally(() => {
+                localStorage.removeItem('kullanici_id');
+                localStorage.removeItem('kullanici_rol');
+                localStorage.removeItem('token');
+                window.location.href = 'index.html';
+            });
         });
     </script>
 </body>

@@ -12,6 +12,5 @@ urlpatterns = [
     path('bakiye/gecmis/', BakiyeGecmisiView.as_view(), name='bakiye_gecmis'),
     path('degerlendirme/', DegerlendirmeYapView.as_view(), name='degerlendirme'),
     path('yonetici/menu/', YoneticiPaneliView.as_view(), name='yonetici_menu'),
-    path('api/cikis/', LogoutView.as_view(), name='cikis'),
-    path('profil/alerjenler/', ProfilAlerjenView.as_view(), name='profil_alerjenler'),
+    path('cikis/', LogoutView.as_view(), name='cikis'),    path('profil/alerjenler/', ProfilAlerjenView.as_view(), name='profil_alerjenler'),
 ]
