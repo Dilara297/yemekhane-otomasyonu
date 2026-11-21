@@ -48,10 +48,16 @@
     </div>
 
     <script>
-        // Çıkış İşlemi
+        // Çıkış yapıldığında Redis'teki oturumu silip tarayıcı belleğini temizler
         document.getElementById('btn-cikis').addEventListener('click', function() {
-            localStorage.clear();
-            window.location.href = 'index.html';
+            const aktifToken = localStorage.getItem('token');
+            fetch('/api/cikis/', {
+                method: 'POST',
+                headers: aktifToken ? { 'Authorization': `Bearer ${aktifToken}` } : {}
+            }).finally(() => {
+                localStorage.clear();
+                window.location.href = 'index.html';
+            });
         });
         // 1. Menü Güncelleme İsteği (PUT)
         document.getElementById('btn-guncelle').addEventListener('click', function() {
